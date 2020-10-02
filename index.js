@@ -17,12 +17,6 @@ morgan.token('data', (req) => {
 
 app.use(morgan( ':method :url :status :res[content-length] - :response-time ms :data'))
 
-const createError = (msg, status) => {
-    const err = new Error(msg)
-    err.status = status
-    return err
-}
-
 app.get('/api/persons', (req, res, next) => {
     Person.find({})
         .then(persons => res.json(persons))
@@ -65,17 +59,13 @@ app.delete('/api/persons/:id', (req, res, next) => {
 app.post('/api/persons', (req, res, next) => {
     const body = req.body
 
-    if (!body.name || !body.number) {
-        return next(createError('name or number missing', 400))
-    }
-
     const newPerson = new Person({
             name: body.name,
             number: body.number
         })
 
     newPerson.save()
-        .then(savedPerson => {res.json(savedPerson)})
+        .then(savedPerson => res.json(savedPerson))
         .catch(err => next(err))
 })
 
@@ -87,27 +77,27 @@ app.put('/api/persons/:id', (req, res, next) => {
             number: body.number
         }
 
-    Person.findByIdAndUpdate(req.params.id, person, {new: true})
+    Person.findByIdAndUpdate(req.params.id, person,
+        { new: true, runValidators: true, context: 'query' })
         .then(updatedPerson => {
             res.json(updatedPerson)
         })
         .catch(err => next(err))
 })
 
-const unknownEndpoint = (req, res, next) => {
-    next(createError('unknown endpoint', 404))
+const unknownEndpoint = (req, res) => {
+    res.status(404).send({error: 'unknown endpoint'})
 }
 
 app.use(unknownEndpoint)
 
 const errorHandler = (err, req, res, next) => {
     console.log(err.message)
+
     if (err.name === 'CastError') {
         return res.status(400).send({error: 'malformed id'})
-    }
-
-    if (err.status && err.message) {
-        return res.status(err.status).send(err.message)
+    } else if (err.name === 'ValidationError') {
+        return res.status(400).send({error: err.message})
     }
 
     next(err)
